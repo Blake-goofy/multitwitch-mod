@@ -20,6 +20,4 @@
 
 2. Click here to install the script: [multitwitch.user.js](https://github.com/Blake-goofy/multitwitch-mod/raw/refs/heads/main/multitwitch.user.js)
 
-3. Click the **Raw** button when viewing the script, and Tampermonkey will prompt you to install it
-
 That's it! Visit [multitwitch.tv](https://multitwitch.tv) and enjoy.
