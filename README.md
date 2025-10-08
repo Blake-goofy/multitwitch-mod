@@ -2,9 +2,10 @@
 
 **Enhanced Multitwitch.tv experience with custom tab navigation and cleaner Twitch chat.**
 
+![Chat Settings](images/settings.png)
+
 ![Custom Tab Selector](images/chat.png)
 
-![Chat Settings](images/settings.png)
 
 ## Features
 
@@ -17,7 +18,7 @@
 
 1. Install [Tampermonkey](https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo?hl=en-US&utm_source=ext_sidebar) for Chrome
 
-2. Click here to install the script: [multitwitch.user.js](https://github.com/blake-goofy/multitwitch-mod/raw/master/multitwitch.user.js)
+2. Click here to install the script: [multitwitch.user.js](https://github.com/Blake-goofy/multitwitch-mod/raw/refs/heads/main/multitwitch.user.js)
 
 3. Click the **Raw** button when viewing the script, and Tampermonkey will prompt you to install it
 
