@@ -1,7 +1,7 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name         Multitwitch
 // @namespace    http://tampermonkey.net/
-// @version      0.0
+// @version      1.0
 // @description  Enhanced Multitwitch.tv experience
 // @author       Blake Becker
 // @match        https://www.multitwitch.tv/*
@@ -400,6 +400,96 @@
         return true;
     }
 
+    function interceptStreamIframes() {
+        let firstStreamProcessed = false;
+        let firstStreamIframe = null;
+
+        // Observer to catch iframes as they're added to the DOM
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(node => {
+                        if (node instanceof HTMLIFrameElement && node.classList.contains('stream') && !firstStreamProcessed) {
+                            // This is the first stream iframe being added
+                            const src = node.getAttribute('src');
+                            console.log('MultiTwitch: Found first stream iframe, original src:', src);
+                            if (src && src.includes('muted=true')) {
+                                const newSrc = src.replace('muted=true', 'muted=false');
+                                node.setAttribute('src', newSrc);
+                                firstStreamProcessed = true;
+                                firstStreamIframe = node;
+                                console.log('MultiTwitch: Changed src to:', newSrc);
+
+                                // Try to unmute via postMessage after the iframe loads
+                                node.addEventListener('load', () => {
+                                    console.log('MultiTwitch: First stream iframe loaded, attempting to unmute via postMessage');
+                                    tryUnmuteViaPostMessage(node);
+                                });
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
+        // Start observing the document for added iframes
+        const streamsDiv = document.getElementById('streams');
+        if (streamsDiv) {
+            observer.observe(streamsDiv, { childList: true, subtree: true });
+            console.log('MultiTwitch: Observing #streams for iframes');
+        } else {
+            // If streams div doesn't exist yet, observe the whole document
+            observer.observe(document.documentElement, { childList: true, subtree: true });
+            console.log('MultiTwitch: Observing document for iframes');
+        }
+
+        // Also check if any stream iframes already exist (in case we're late)
+        const existingStreams = document.querySelectorAll('iframe.stream');
+        console.log('MultiTwitch: Found', existingStreams.length, 'existing stream iframes');
+        if (existingStreams.length > 0 && !firstStreamProcessed) {
+            const firstStream = existingStreams[0];
+            const src = firstStream.getAttribute('src');
+            console.log('MultiTwitch: First existing stream src:', src);
+            if (src && src.includes('muted=true')) {
+                const newSrc = src.replace('muted=true', 'muted=false');
+                firstStream.setAttribute('src', newSrc);
+                firstStreamProcessed = true;
+                firstStreamIframe = firstStream;
+                console.log('MultiTwitch: Changed existing stream src to:', newSrc);
+
+                // Try to unmute via postMessage
+                setTimeout(() => tryUnmuteViaPostMessage(firstStream), 1000);
+            }
+        }
+
+        return true;
+    }
+
+    function tryUnmuteViaPostMessage(iframe) {
+        if (!iframe || !iframe.contentWindow) {
+            console.log('MultiTwitch: Cannot access iframe contentWindow');
+            return;
+        }
+
+        // Try multiple approaches to unmute
+        const attempts = [
+            { eventName: 'setMuted', params: false },
+            { eventName: 'setVolume', params: 0.5 },
+        ];
+
+        attempts.forEach((attempt, index) => {
+            setTimeout(() => {
+                try {
+                    const message = JSON.stringify(attempt);
+                    iframe.contentWindow.postMessage(message, 'https://player.twitch.tv');
+                    console.log('MultiTwitch: Sent postMessage attempt', index + 1, ':', message);
+                } catch (e) {
+                    console.log('MultiTwitch: postMessage error:', e);
+                }
+            }, index * 500);
+        });
+    }
+
     function initTabSelector() {
         const tablist = document.getElementById('tablist');
         const bottomRightBar = document.getElementById('bottom_right_bar');
@@ -407,13 +497,13 @@
         if (tablist && bottomRightBar) {
             const chatbox = document.getElementById('chatbox');
             const SELECTED = '#772ce8'; // active tab color
-            
+
             const originalTabs = tablist.querySelectorAll('li a');
             const streamerNames = Array.from(originalTabs).map(tab => {
                 const href = tab.getAttribute('href');
                 return href ? href.replace('#chat-', '') : '';
             }).filter(name => name);
-            
+
             // Ensure suggestions CSS available on this host
             (function ensureSuggestCSS(){
                 const id = 'mtw-suggest-css';
@@ -449,11 +539,11 @@
             customTabSelector.style.float = 'right';
             customTabSelector.style.clear = 'right';
             customTabSelector.style.marginRight = '0';
-            
+
             if (chatbox) {
                 chatbox.parentNode.insertBefore(customTabSelector, chatbox.nextSibling);
             }
-            
+
             // Inject CSS to ensure panels/iframes fill chat height even if site sets inline px heights
             (function injectCSS(){
                 const id = 'cts-fill-chat-css';
@@ -664,7 +754,7 @@
                 ensureSeedFromUrlOncePerPath();
                 // Remove any existing
                 document.querySelectorAll('.mtw-suggest').forEach(n => n.remove());
-                
+
                 const valueNow = (forInput.value || '').trim();
                 const items = filterHistory(valueNow);
                 if (!items.length) return null;
@@ -675,7 +765,7 @@
                 const baseRect = inputRect && inputRect.width ? inputRect : anchorRect;
                 const desiredWidth = Math.max(140, baseRect.width || 140);
                 listEl.style.visibility = 'hidden';
-                listEl.style.left = ((baseRect.left || 0)) + 'px';      
+                listEl.style.left = ((baseRect.left || 0)) + 'px';
                 listEl.style.top = ((baseRect.bottom || 0) + 4) + 'px';
                 listEl.style.width = desiredWidth + 'px';
                 let activeIdx = -1;
@@ -902,7 +992,7 @@
 
                 input.addEventListener('keydown', (e) => {
                     const list = input._mtwSuggestList;
-                    
+
                     if (e.key === 'Tab') {
                         // If suggestions are showing, select bottom item
                         if (list) {
@@ -1002,7 +1092,7 @@
                 tabButton.addEventListener('dblclick', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    
+
                     ensureVisible(tabButton, () => {
                         const originalName = streamer;
                         const btnWidth = tabButton.offsetWidth || 120;
@@ -1097,7 +1187,7 @@
 
                         input.addEventListener('keydown', (ke) => {
                             const list = input._mtwSuggestList;
-                            
+
                             if (ke.key === 'Tab') {
                                 // If suggestions are showing, select bottom item
                                 if (list) {
@@ -1145,11 +1235,11 @@
                 // Clamp offset
                 currentOffset = Math.max(0, Math.min(currentOffset, maxOffset));
                 track.style.transform = `translateX(-${currentOffset}px)`;
-                
+
                 // Determine if we can scroll left or right
                 const canScrollLeft = currentOffset > 1;
                 const canScrollRight = currentOffset < (maxOffset - 1);
-                
+
                 // Show/hide arrows and fades based purely on scroll capability
                 leftArrow.style.display = canScrollLeft ? 'flex' : 'none';
                 rightArrow.style.display = canScrollRight ? 'flex' : 'none';
@@ -1172,21 +1262,21 @@
                 try {
                     const btnRect = el.getBoundingClientRect();
                     const vpRect = viewport.getBoundingClientRect();
-                    
+
                     // Check if button is obscured by arrows (with small margin)
                     const margin = 4;
                     const leftEdge = vpRect.left + (leftArrow.style.display !== 'none' ? ARROW_W : 0) + margin;
                     const rightEdge = vpRect.right - (rightArrow.style.display !== 'none' ? ARROW_W : 0) - margin;
-                    
+
                     const isObscuredLeft = btnRect.left < leftEdge;
                     const isObscuredRight = btnRect.right > rightEdge;
-                    
+
                     if (isObscuredLeft || isObscuredRight) {
                         // Calculate how much to scroll to bring button into clear view
                         const trackRect = track.getBoundingClientRect();
                         const btnLeftInTrack = btnRect.left - trackRect.left;
                         const btnRightInTrack = btnRect.right - trackRect.left;
-                        
+
                         let targetOffset;
                         if (isObscuredLeft) {
                             // Scroll so button's left edge is just past the left arrow
@@ -1195,9 +1285,9 @@
                             // Scroll so button's right edge is just before the right arrow
                             targetOffset = btnRightInTrack - vpRect.width + ARROW_W + margin + 8;
                         }
-                        
+
                         scrollTo(targetOffset);
-                        
+
                         // Wait for transition to complete before executing callback
                         setTimeout(() => {
                             if (callback) callback();
@@ -1245,21 +1335,21 @@
             document.addEventListener('keydown', (e) => {
                 const ae = document.activeElement;
                 const inInput = ae && ((ae.tagName === 'INPUT') || (ae.tagName === 'TEXTAREA') || (ae.getAttribute && ae.getAttribute('contenteditable') === 'true'));
-                
+
                 // Tab key: cycle through chat buttons only (unless we're in an input field)
                 if (e.key === 'Tab') {
                     // If in an input field, let the input's own keydown handler deal with Tab
                     if (inInput) return;
-                    
+
                     e.preventDefault();
                     const allButtons = track.querySelectorAll('button');
                     if (!allButtons.length) return;
-                    
+
                     let currentIndex = -1;
                     allButtons.forEach((btn, idx) => {
                         if (btn === ae) currentIndex = idx;
                     });
-                    
+
                     let nextIndex;
                     if (e.shiftKey) {
                         // Shift+Tab: go backwards
@@ -1268,7 +1358,7 @@
                         // Tab: go forwards
                         nextIndex = currentIndex >= allButtons.length - 1 ? 0 : currentIndex + 1;
                     }
-                    
+
                     const nextButton = allButtons[nextIndex];
                     if (nextButton) {
                         ensureVisible(nextButton, () => {
@@ -1277,9 +1367,9 @@
                     }
                     return;
                 }
-                
+
                 if (inInput) return;
-                
+
                 const vpWidth = viewport.clientWidth;
                 if (e.key === 'ArrowRight') {
                     const contentWidth = track.scrollWidth;
@@ -1299,16 +1389,19 @@
             // Initial state
             scrollTo(0);
             adjustChatHeight();
-            
+
             tablist.style.display = 'none';
             bottomRightBar.remove();
-            
+
             console.log('Custom tab selector created');
         }
     }
-    
+
     // Route: twitch embed chat vs multitwitch host
     if (!initTwitchChatCleaner()) {
+        // Start intercepting stream iframes immediately (before DOM is ready)
+        interceptStreamIframes();
+
         initTabSelector();
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initTabSelector);
